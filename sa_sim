@@ -1,0 +1,726 @@
+
+run <- function() (invisible({
+
+# Citation ----------------------------------------------------------------
+
+
+  # This Software:
+    # [information removed for blind review]. (2023). Sourcing Algorithm
+    # Simulations: A Companion R script [Software]. Retrieved from [information
+    # removed for blind review]
+  
+  # Research Article:
+    # [information removed for blind review]. (2023). Sourcing algorithms: 
+    # Rethinking fairness in hiring in the era of algorithmic 
+    # recruitment.
+    
+
+# Information -------------------------------------------------------------
+
+
+  #print information to console
+  cat("\n  Sourcing Algorithm Simulations
+  
+  This R Script was created as a companion software to the journal 
+  article, 'Sourcing algorithms: Rethinking fairness in hiring in the era of 
+  algorithmic recruitment'.
+  
+  Users may replicate the Monte Carlo simulations presented in the article by 
+  retaining the default values in the 'Parameters' section of this script or 
+  choose to run novel simulations by modifying the parameters.
+  
+  The default parameters for this script required approximately 50 hours to run 
+  on a high-spec PC running Windows 11. The duration of the simulations will 
+  depend on the hardware and software configuration of your computer. Editing 
+  some parameters, such as increasing the number of simulations (by adding more 
+  values of a parameter or parameters), increasing the number of iterations per 
+  simulation, or increasing the size of the population, may dramatically 
+  increase the time required to run this script.
+  
+  License Information
+  
+  Sourcing Algorithm Simulations is free software: you can redistribute it 
+  and/or modify it under the terms of the GNU General Public License as 
+  published by the Free Software Foundation, either version 3 of the License, or 
+  (at your option) any later version.
+  
+  This program is distributed in the hope that it will be useful, but 
+  WITHOUT ANY WARRANTY; without even the implied warranty of 
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General 
+  Public License for more details.
+  
+  You should have received a copy of the GNU General Public License along 
+  with this program. If not, see <https://www.gnu.org/licenses/>.
+      
+  To cite this software, please use:
+  
+  [information removed for blind review]. (2023). Sourcing Algorithm
+  Simulations: A Companion R script [Software]. Retrieved from [information
+  removed for blind review]\n\n")
+
+
+# Script Setup ------------------------------------------------------------
+
+
+  #print script setup message to console
+  cat("\nLoading required packages and simulation settings...\n")
+
+  #packages required by script
+  req.pkgs <- c("MASS",       #function for multivariate normal distributions
+                "effsize",    #function to calculate Cohen's d
+                "tidyverse",  #functions for data manipulation
+                "foreach",    #function for parallel looping structure
+                "doParallel", #parallel backend for the 'foreach' function
+                "doSNOW",     #parallel backend for the '%dopar%' function
+                "doRNG")      #generic reproducible backend for 'foreach'
+  
+  #install missing packages
+  inst.pkgs <- req.pkgs %in% rownames(installed.packages())
+  if (any(inst.pkgs==FALSE)) {
+    install.packages(req.pkgs[!inst.pkgs])
+  }
+  
+  #load required packages
+  invisible(lapply(req.pkgs,library,character.only=TRUE,quietly=TRUE))
+  
+  #miscellaneous script setup
+  set.seed(123456)                    #set seed for reproducible simulations
+  options(scipen=999,max.print=9999)  #disable scientific notation and increase
+                                      #extend the number of lines you can print
+                                      #to the console
+
+
+# Parameters --------------------------------------------------------------
+
+  
+  #to customize this script, edit the simulation parameters in this section
+  
+  #all simulation parameters will be fully crossed, resulting in a set of 
+  #simulations that model all possible combinations of the parameters entered
+  
+  #if simulations of multiple values of any parameter(s) are desired, you may
+  #enter a vector or list of those parameters using the combine function, 'c()'.
+  #for example, to run two sets of simulations which model mean subgroup 
+  #differences of 0.5 and 1 (Cohen's d) in the performance criterion (y), edit 
+  #the code below so that it reads "dy <- c(0.5,1)"
+  
+  
+  #simulation settings
+  sim.n <- 2000         #number of iterations in simulation
+  sim.alg <- T          #selection on recruitment algorithm (T=yes,F=no)
+  sim.self <- F         #selection on interest/attraction score (T=yes,F=no)
+
+  #population parameters
+  a.m <- 0              #mean of a (algorithm score)
+  a.v <- 1              #variance of a
+  i.m <- 0              #mean of i (applicant interest/attraction score)
+  i.v <- 1              #variance of i
+  x.m <- 0              #mean of x (selection test score)
+  x.v <- 1              #variance of x
+  y.m <- 0              #mean of y (performance criterion score)
+  y.v <- 1              #variance of y
+  g.m <- 0              #mean of gender (continuous)
+  g.v <- 1              #variance of gender (continuous)
+  g.p <- .5             #male proportion of population
+                        #positive mean subgroup differences favor men (f=0,m=1)
+  da <- c(0,1)#0,.2,.5,1)    #mean subgroup difference in predictor a (Cohen's d)
+  di <- 0               #mean subgroup difference in predictor i (Cohen's d)
+  dx <- c(0)#0,.1,.3,.5)   #mean subgroup difference in predictor x (Cohen's d)
+  dy <- 0               #mean subgroup difference in criterion y (Cohen's d)
+  ay.c <- c(.1)#.1,.2)      #correlation between predictor a and criterion y
+  iy.c <- 0             #correlation between predictor i and criterion y
+  xy.c <- c(.5)#.3,.5,.7)   #correlation between predictor x and criterion y
+  ax.c <- .1            #correlation between predictor a and predictor x
+  ai.c <- 0             #correlation between predictor i and predictor i
+  ix.c <- 0             #correlation between predictor i and predictor x
+
+  #selection hurdle characteristics
+  n.0  <- 2000000       #size of the simulated population (size of population)
+  n.1  <- 60000         #number of candidates selected on a (# of targets)
+  n.2  <- 2000          #number of ad targets that apply (# of applicants)
+  n.3  <- c(75,150,300,600,1200) #number of applicants selected on x (# of hires)
+                        #n.1=number_of_ads_served
+                        #n.2=conversion_rate*n.1
+                        #n.3=selection_ratio*n.2
+  
+  #parallel computation settings
+  r.cores <- 2          #number of cpu cores to reserve for system use
+  
+  #output settings
+  files <- T            #save results of all simulation iterations to file
+  plots <- T            #plot mean and 95% confidence interval of estimates
+  
+  
+# Functions ---------------------------------------------------------------
+
+  
+  #function to convert mean subgroup differences to correlations
+  cohen.d2r <- function(d=d,N=N,n1=n1,n2=n2){
+    
+    r <- d/sqrt(d^2+(N^2-2*N)/(n1*n2))   #(Lakens,2013; McGrath & Meyer,2006) 
+    r <- r*sqrt(pi/2)                    #correct correlations for attenuation
+                                         #during dichotomization (Rousson,2014)
+    return(r)
+    
+  }
+  
+  #main simulation function 
+  simFun <- function(x){
+    
+    #load simulation variables from the list of arguments passed to 'simFun'
+    sim.n <- x$sim.n
+    sim.alg <- x$sim.alg
+    sim.self <- x$sim.self
+    a.m <- x$a.m
+    a.v <- x$a.v
+    i.m <- x$i.m
+    i.v <- x$i.v
+    x.m <- x$x.m
+    x.v <- x$x.v
+    y.m <- x$y.m
+    y.v <- x$y.v
+    g.m <- x$g.m
+    g.v <- x$g.v
+    g.p <- x$g.p
+    da <- x$da
+    di <- x$di
+    dx <- x$dx
+    dy <- x$dy
+    ay.c <- x$ay.c
+    iy.c <- x$iy.c
+    xy.c <- x$xy.c
+    ax.c <- x$ax.c
+    ai.c <- x$ai.c
+    ix.c <- x$ix.c
+    n.0 <- x$n.0
+    n.1 <- x$n.1
+    n.2 <- x$n.2
+    n.3 <- x$n.3
+    r.cores <- x$r.cores
+    files <- x$files
+    plots <- x$plots
+    
+    #convert mean subgroup differences to correlations
+    ag.c <- cohen.d2r(d=da,N=n.0,n1=((1-g.p)*n.0),n2=(g.p*n.0))
+    ig.c <- cohen.d2r(d=di,N=n.0,n1=((1-g.p)*n.0),n2=(g.p*n.0))
+    xg.c <- cohen.d2r(d=dx,N=n.0,n1=((1-g.p)*n.0),n2=(g.p*n.0))
+    yg.c <- cohen.d2r(d=dy,N=n.0,n1=((1-g.p)*n.0),n2=(g.p*n.0))
+    
+    #create a vector of means for simulation variables
+    mu <- c(g.m,a.m,i.m,x.m,y.m)
+    
+    #create a correlation matrix for simulation variables
+    cor.mat <- matrix(c(1,ag.c,ig.c,xg.c,yg.c,
+                        ag.c,1,ai.c,ax.c,ay.c,
+                        ig.c,ai.c,1,ix.c,iy.c,
+                        xg.c,ax.c,ix.c,1,xy.c,
+                        yg.c,ay.c,iy.c,xy.c,1),5,5)
+    
+    #label rows and columns of cor.mat
+    rownames(cor.mat) <- colnames(cor.mat) <- c("g","a","i","x","y")
+    
+    #convert correlation matrix to variance-covariance matrix
+    stdevs <- sqrt(c(g.v,a.v,i.v,x.v,y.v))    #vector of standard deviations
+    sigma <- (stdevs%*%t(stdevs))*cor.mat     #variance-covariance matrix
+                                              #(Oswald et al., 2014)
+    
+    #prepare for parallel computation
+    ncores <- max(1,detectCores()-r.cores)    #detect available cores
+    clust <- makeCluster(ncores,outfile="")   #define the cluster
+    registerDoSNOW(clust)                     #register cluster
+    # registerDoSEQ(clust)                    #register sequential backend
+                                              #note: sequential processing is
+                                              #MUCH SLOWER and this code is for
+                                              #diagnostic purposes only
+    
+    #print the progress for every iteration of the simulation
+    prog <- function(n) cat(sprintf("\rIteration %d out of",n),
+                              sprintf("%d complete",sim.n))
+    opts <- list(progress=prog)
+    
+    #simulate multiple selection scenarios using 'foreach' loop
+    out <- foreach(i=1:sim.n,
+                   .combine=rbind,
+                   .errorhandling='pass',
+                   .options.snow=opts,
+                   .packages=c("MASS",
+                               "effsize",
+                               "tidyverse")) %dorng% {    #use 'donrg' for 
+                                                          #reproducible results
+      
+      #use mvrnorm to generate scores for the simulated population
+      scores.pop <- as.data.frame(mvrnorm(n.0,mu,sigma))  #generate scores and 
+                                                          #store in a dataframe
+      index <- c(1:n.0)                                   #create index
+      scores.pop <- cbind(index,scores.pop)               #add to dataframe
+      
+      scores.pop <- scores.pop %>%                        #make discrete gender
+                    mutate(g.dis = case_when(             #variable (f=0,m=1)
+                     g <= quantile(scores.pop$g,probs=c((1-g.p))) ~ 0,  #women
+                     g > quantile(scores.pop$g,probs=c((1-g.p))) ~ 1)   #men
+                    )
+      
+      #get counts of men and women
+      women1 <- nrow(scores.pop[scores.pop$g.dis==0,])
+      men1 <- nrow(scores.pop[scores.pop$g.dis==1,])
+
+      #create gender factor
+      gen.fac1 <- factor(scores.pop$g.dis,levels=c("1","0"),ordered=TRUE)
+      
+      #store descriptive statistics for population data
+      if (women1>=1|men1>=1) {                             #check if there are
+                                                           #enough men and women
+                                                           #for da, dx, and dy
+        
+      temp1 <- c(women1,                                                 #women
+                 men1,                                                   #men
+                 mean(scores.pop$a,na.rm=TRUE),                          #mean a
+                 mean(scores.pop$x,na.rm=TRUE),                          #mean x
+                 mean(scores.pop$y,na.rm=TRUE),                          #mean y
+                 cohen.d(scores.pop$a~gen.fac1,na.rm=TRUE)$estimate,     #da
+                 cohen.d(scores.pop$x~gen.fac1,na.rm=TRUE)$estimate,     #dx
+                 cohen.d(scores.pop$y~gen.fac1,na.rm=TRUE)$estimate,     #dy
+                 cor(scores.pop$a,scores.pop$y,use="complete.obs"),      #ray
+                 cor(scores.pop$x,scores.pop$y,use="complete.obs"),      #rxy
+                 cor(scores.pop$a,scores.pop$x,use="complete.obs"))      #rax
+      
+      } else {
+        
+      temp1 <- c(women1,                                                 #women
+                 men1,                                                   #men
+                 mean(scores.pop$a,na.rm=TRUE),                          #mean a
+                 mean(scores.pop$x,na.rm=TRUE),                          #mean x
+                 mean(scores.pop$y,na.rm=TRUE),                          #mean y
+                 NA,                                                     #da
+                 NA,                                                     #dx
+                 NA,                                                     #dy
+                 cor(scores.pop$a,scores.pop$y,use="complete.obs"),      #ray
+                 cor(scores.pop$x,scores.pop$y,use="complete.obs"),      #rxy
+                 cor(scores.pop$a,scores.pop$x,use="complete.obs"))      #rax
+      
+      }
+      
+      #hurdle 1 - select scores on a to choose job ad targets
+      if (sim.alg==FALSE) {
+        
+        scores.1 <- sample_n(scores.pop,n.1)  #simulate random ad delivery if
+                                              #sim.alg=FALSE
+        
+      } else {
+        
+        scores.1 <- top_n(scores.pop,n.1,a)   #simulate ad delivery based on 
+                                              #recruitment algorithim scores if
+      }                                       #sim.alg=TRUE
+      
+      #clean up population scores
+      rm(scores.pop)
+      
+      #select scores on interest/attraction to simulate self-selection
+      if (sim.self==FALSE) {
+        
+        scores.2 <- sample_n(scores.1,n.2)    #select a random sample from the
+                                              #ad targets if sim.self=FALSE
+                                              
+      } else {
+        
+        scores.2 <- top_n(scores.1,n.2,i)     #simulate self-selection based on 
+                                              #interest/attraction score if
+                                              #sim.self=TRUE
+      } 
+      
+      #clean up ad target scores
+      rm(scores.1,men1,women1,gen.fac1)
+      
+      #get counts of men and women
+      women2 <- nrow(scores.2[scores.2$g.dis==0,])
+      men2 <- nrow(scores.2[scores.2$g.dis==1,])
+      
+      #create gender factor
+      gen.fac2 <- factor(scores.2$g.dis,levels=c("1","0"),ordered=TRUE)
+      
+      #store descriptive statistics for applicant data
+      if (women2>=1|men2>=1) {                             #check if there are
+                                                           #enough men and women
+                                                           #for da, dx, and dy
+        
+      temp2 <- c(women2,                                                 #women
+                 men2,                                                   #men
+                 mean(scores.2$a,na.rm=TRUE),                            #mean a
+                 mean(scores.2$x,na.rm=TRUE),                            #mean x
+                 mean(scores.2$y,na.rm=TRUE),                            #mean y
+                 cohen.d(scores.2$a~gen.fac2,na.rm=TRUE)$estimate,       #da
+                 cohen.d(scores.2$x~gen.fac2,na.rm=TRUE)$estimate,       #dx
+                 cohen.d(scores.2$y~gen.fac2,na.rm=TRUE)$estimate,       #dy
+                 cor(scores.2$a,scores.2$y,use="complete.obs"),          #ray
+                 cor(scores.2$x,scores.2$y,use="complete.obs"),          #rxy
+                 cor(scores.2$a,scores.2$x,use="complete.obs"))          #rax
+      
+      } else {
+      
+      temp2 <- c(women2,                                                 #women
+                 men2,                                                   #men
+                 mean(scores.2$a,na.rm=TRUE),                            #mean a
+                 mean(scores.2$x,na.rm=TRUE),                            #mean x
+                 mean(scores.2$y,na.rm=TRUE),                            #mean y
+                 NA,                                                     #da
+                 NA,                                                     #dx
+                 NA,                                                     #dy
+                 cor(scores.2$a,scores.2$y,use="complete.obs"),          #ray
+                 cor(scores.2$x,scores.2$y,use="complete.obs"),          #rxy
+                 cor(scores.2$a,scores.2$x,use="complete.obs"))          #rax
+      
+      }
+      
+      #hurdle 2 - select top scores on x to select recipients of offers
+      scores.3 <- top_n(scores.2,n.3,x)
+      
+      #get counts of men and women
+      women3 <- nrow(scores.3[scores.3$g.dis==0,])
+      men3 <- nrow(scores.3[scores.3$g.dis==1,])
+      
+      #create gender factor
+      gen.fac3 <- factor(scores.3$g.dis,levels=c("1","0"),ordered=TRUE)
+      
+      #store descriptive statistics for hires
+      if (women3>=1|men3>=1) {                             #check if there are
+                                                           #enough men and women
+                                                           #for da, dx, and dy
+        
+      temp3 <- c(women3,                                                 #women
+                 men3,                                                   #men
+                 mean(scores.3$a,na.rm=TRUE),                            #mean a
+                 mean(scores.3$x,na.rm=TRUE),                            #mean x
+                 mean(scores.3$y,na.rm=TRUE),                            #mean y
+                 cohen.d(scores.3$a~gen.fac3,na.rm=TRUE)$estimate,       #da
+                 cohen.d(scores.3$x~gen.fac3,na.rm=TRUE)$estimate,       #dx
+                 cohen.d(scores.3$y~gen.fac3,na.rm=TRUE)$estimate,       #dy
+                 cor(scores.3$a,scores.3$y,use="complete.obs"),          #ray
+                 cor(scores.3$x,scores.3$y,use="complete.obs"),          #rxy
+                 cor(scores.3$a,scores.3$x,use="complete.obs"),          #rax
+                 (women3/women2)/(men3/men2),                            #ai
+                 cor(scores.3[scores.3$g.dis==1,"x"],      
+                     scores.3[scores.3$g.dis==1,"y"],      #rxy.m to calculate
+                     use="complete.obs"))                  #d_Mod_Signed (Dahlke
+                                                           #& Sackett, 2022;
+    } else {                                               #Nye & Sackett, 2017)
+      
+      temp3 <- c(women3,                                                 #women
+                 men3,                                                   #men
+                 mean(scores.3$a,na.rm=TRUE),                            #mean a
+                 mean(scores.3$x,na.rm=TRUE),                            #mean x
+                 mean(scores.3$y,na.rm=TRUE),                            #mean y
+                 NA,                                                     #da
+                 NA,                                                     #dx
+                 NA,                                                     #dy
+                 cor(scores.3$a,scores.3$y,use="complete.obs"),          #ray
+                 cor(scores.3$x,scores.3$y,use="complete.obs"),          #rxy
+                 cor(scores.3$a,scores.3$x,use="complete.obs"),          #rax
+                 (women3/women2)/(men3/men2),                            #ai
+                 cor(scores.3[scores.3$g.dis==1,"x"],
+                     scores.3[scores.3$g.dis==1,"y"],                    #rxy.m
+                     use="complete.obs"))
+        
+      }
+      
+      #clean up scores for applicants and hires
+      rm(scores.2,scores.3,men2,men3,women2,women3,gen.fac2,gen.fac3)
+      
+      #calculate d.mod.signed from temp3
+      d.mod.signed <- (temp3[7] - (temp3[13]*temp3[8]))
+      
+      #combine and store results
+      results <- c(temp1,temp2,temp3[c(1:12)],d.mod.signed)
+      names(results) <- c("f1","m1","a1","x1","y1","da1",
+                          "dx1","dy1","ray1","rxy1","rax1",
+                          "f2","m2","a2","x2","y2","da2",
+                          "dx2","dy2","ray2","rxy2","rax2",
+                          "f3","m3","a3","x3","y3","da3",
+                          "dx3","dy3","ray3","rxy3","rax3",
+                          "ai","d.mod.signed")
+
+      #clean up
+      rm(temp1,temp2,temp3)   #remove temporary variables
+      gc()                    #clear memory 
+      
+      #return results
+      return(results)
+    
+    }
+    
+    #end parallel computations and stop cluster
+    stopCluster(clust)                                    #stop the cluster
+    
+    #create an index of output columns that have more than one non-NA value
+    ndx <- (nrow(out)-1)>=colSums(is.na(out))
+                    
+    #calculate column means and sds of simulation output
+    tmp.row1 <- tmp.row2 <- c(rep(NA,ncol(out)))          #all NA temp row
+    tmp.row1[ndx] <- apply(out[,ndx],2,mean,na.rm=TRUE)   #compute means
+    tmp.row2[ndx] <- apply(out[,ndx],2,sd,na.rm=TRUE)     #compute sds
+    out<- rbind(out,tmp.row1)                             #add means to output
+    row.names(out)[nrow(out)] <- "mean"                   #label mean row
+    out <- rbind(out,tmp.row2)                            #add sds to output
+    row.names(out)[nrow(out)] <- "sd"                     #label sd row
+    
+    #create descriptive simulation filename
+    sim.name <- paste0("sim.n",sim.n,"sim.alg",sim.alg,"a.m",a.m,"a.v",a.v,
+                       "x.m",x.m,"x.v",x.v,"y.m",y.m,"y.v",y.v,"g.m",g.m,"g.v",
+                       g.v,"da",da,"dx",dx,"dy",dy,"ay.c",ay.c,"xy.c",xy.c,
+                       "ax.c",ax.c,"n.0",n.0,"n.1",n.1,"n.2",n.2,"n.3",n.3,
+                       "r.cores",r.cores,"files",files,"plots",plots)
+    
+    #individual iteration output
+    if (files==T){     #check user setting
+    
+      #save individual iteration output as .csv file
+      write.csv(out,paste0(n,".",sim.name,".csv"))
+      
+    }
+    
+    #stability of simulation estimates across all iterations of the simulation
+    if (plots==T){     #check user setting
+      
+      #create dataframe for data on the stability of estimates
+      stab.m <- NULL
+      stab.se <- NULL
+      
+      #calculate means for all study variables
+      for(i1 in 2:(sim.n+1)){
+        temp4 <- apply(out[1:i1,],2,mean,na.rm=TRUE)
+        stab.m <- rbind(stab.m,temp4)
+      }
+      
+      #calculate the standard error of the estimate for all study variables
+      for(i2 in 2:(sim.n+1)){
+        temp5 <- apply(out[1:i2,],2,sd,na.rm=TRUE)
+        stab.se <- rbind(stab.se,(temp5/sqrt(i2)))
+      }
+    
+      #plot estimates of dx, rxy, y, and AI ratio with 95% confidence intervals
+      pdf(paste0(n,".",sim.name,".plots.pdf"))      #create .pdf
+      
+      par(mfrow=c(2,2))                       #create a 2 x 2 matrix of plots
+      
+      #plot dx
+      iter <- nrow(stab.m)                    #number of iterations
+      plot(stab.m[,"dx3"],
+           type="l",
+           col="blue",
+           xlab="Iteration",
+           ylab=expression("Mean d"[x]*" (Hires)"),
+           ylim=c(range(c(((stab.m[iter,"dx3"]-(1.96*stab.se[iter,"dx3"]))-.14),
+              ((stab.m[iter,"dx3"]+(1.96*stab.se[iter,"dx3"])+.14))),na.rm=TRUE)))
+        lines((stab.m[,"dx3"]+(1.96*stab.se[,"dx3"])),col="red")
+        lines((stab.m[,"dx3"]-(1.96*stab.se[,"dx3"])),col="red")
+      
+      #plot rxy  
+      plot(stab.m[,"rxy3"],
+           type="l",
+           col="blue",
+           xlab="Iteration",
+           ylab=expression("Mean r"[xy]*" (Hires)"),
+           ylim=c(range(c(((stab.m[iter,"rxy3"]-(1.96*stab.se[iter,"rxy3"]))-.14),
+              ((stab.m[iter,"rxy3"]+(1.96*stab.se[iter,"rxy3"])+.14))),na.rm=TRUE)))
+        lines((stab.m[,"rxy3"]+(1.96*stab.se[,"rxy3"])),col="red")
+        lines((stab.m[,"rxy3"]-(1.96*stab.se[,"rxy3"])),col="red")
+      
+      #plot y  
+      plot(stab.m[,"y3"],
+           type="l",
+           col="blue",
+           xlab="Iteration",
+           ylab="Mean y (Hires)",
+           ylim=c(range(c(((stab.m[iter,"y3"]-(1.96*stab.se[iter,"y3"]))-.14),
+              ((stab.m[iter,"y3"]+(1.96*stab.se[iter,"y3"])+.14))),na.rm=TRUE)))
+        lines((stab.m[,"y3"]+(1.96*stab.se[,"y3"])),col="red")
+        lines((stab.m[,"y3"]-(1.96*stab.se[,"y3"])),col="red")
+      
+      #plot AI ratio
+      plot(stab.m[,"ai"],
+           type="l",
+           col="blue",
+           xlab="Iteration",
+           ylab="Mean AI Ratio",
+           ylim=c(range(c(((stab.m[iter,"ai"]-(1.96*stab.se[iter,"ai"]))-.14),
+              ((stab.m[iter,"ai"]+(1.96*stab.se[iter,"ai"])+.14))),na.rm=TRUE)))
+        lines((stab.m[,"ai"]+(1.96*stab.se[,"ai"])),col="red")
+        lines((stab.m[,"ai"]-(1.96*stab.se[,"ai"])),col="red")
+        
+      dev.off()   #close and save .pdf file
+      
+    }
+    
+    #return out
+    return(out)
+    
+  }
+
+
+# Run Simulation ----------------------------------------------------------
+
+  
+  #create tibble crossing all possible combinations of simulation parameters
+  par.tab <- crossing(sim.n,sim.alg,sim.self,a.m,a.v,i.m,i.v,x.m,x.v,y.m,y.v,
+                      g.m,g.v,g.p,da,di,dx,dy,ay.c,iy.c,xy.c,ax.c,ai.c,ix.c,n.0,
+                      n.1,n.2,n.3,r.cores,files,plots)
+  
+  #name the columns of the tibble
+  names(par.tab) <- c("sim.n","sim.alg","sim.self","a.m","a.v","i.m","i.v",
+                      "x.m","x.v","y.m","y.v","g.m","g.v","g.p","da","di","dx",
+                      "dy","ay.c","iy.c","xy.c","ax.c","ai.c","ix.c","n.0",
+                      "n.1","n.2","n.3","r.cores","files","plots")
+  
+  par.list <- NULL                               #clear par.list
+  par.list <- par.tab %>% pmap(~ list(...))      #convert tibble to a list of
+                                                 #arguments for simFun and save
+                                                 #in par.list
+  
+  #save all the sets of parameters used for every simulation as .csv file
+  write.csv(par.tab,paste0("0.simulation.parameters.csv"))
+  
+  #create dataframe for the simulation estimates
+  estimates <- data.frame()
+  
+  #print start message to console
+  cat("\nSetup complete.\n")
+  
+  #record simulation start time
+  start <- round(proc.time()["elapsed"],2)
+  
+  #create time remaining variable
+  remain <- NULL
+  
+  #run all simulations
+  for(n in 1:nrow(par.tab)){
+    
+    #record elapsed time
+    elapse <- round((proc.time()["elapsed"]-start),2)
+    
+    #after first simulation is complete
+    if (n>1) {
+      
+      #estimate time remaining
+      remain <- round((((proc.time()["elapsed"]-start)/(n-1))*nrow(par.tab)),2)
+      
+      #show time in hours if time remaining > 2 hours
+      if (remain>=5400) {
+        
+        t <- 3600; u <- "hours"
+        
+      } else {    #else, show time in minutes
+        
+        t <- 60; u <- "minutes"
+        
+      }
+      
+      #print overall script progress
+      cat(paste0("\n\nProgress: ",
+                 round(elapse/t,1),
+                 " / ~",
+                 round(remain/t,1),
+                 " ",
+                 u,
+                 "\n"))
+      
+    }
+    
+    #print progress bar
+    pct <- round(elapse/remain,2)                        #percent complete
+    if (n>1) cat(paste(c(rep(">",floor(pct*20)),
+                          rep("-",(20 -floor(pct*20))),
+                          pct*100,
+                          "%\n"),sep=""))
+    
+    #print simulation progress (number of simulations)
+    cat(paste0("\nSimulation ",n," out of ",nrow(par.tab),"\n"))
+    
+    #get estimates
+    temp6 <- simFun(x=par.list[[n]])
+    
+    #make empty column for rows where the AI ratio does not apply
+    empty1 <- empty2 <- c(rep(NA,nrow(temp6)))
+    temp6 <-cbind(temp6,empty1,empty2)
+    
+    #create a separate row for each stage of the simulation by group (i.e., 
+    #population, applicants, hires)
+    temp6 <- rbind(temp6["mean",c(1:11,36:37)],
+                   temp6["mean",c(12:22,36:37)],
+                   temp6["mean",c(23:35)])
+
+    #append estimates from each simulation
+    estimates <- rbind(estimates,temp6)
+    
+    #clean up
+    rm(temp6)
+    
+  }
+  
+  #format simulation estimates
+  rows <- nrow(estimates)                                       #number of sims
+  sim <- c(rep(1:(rows/3),each=3))                              #sim labels
+  grp <- c(rep(c("Population","Applicants","Hires"),(rows/3)))  #group labels
+  tot <- estimates$f1+estimates$m1                              #create total n
+                                                                #variable
+  
+  final <- cbind(sim,                                           #format columns
+                 grp,
+                 estimates[,c("f1","m1")],
+                 tot,
+                 estimates[,c("da1","dx1","dy1",
+                              "rax1","ray1","rxy1",
+                              "y1","empty1","empty2")])
+  
+  names(final) <- c("Sim","Group","Women","Men","Total",        #label columns       
+                    "da","dx","dy","rax","ray","rxy",
+                    "Mean y","AI ratio","d_Mod_Signed")
+  
+  #round all estimates to the appropriate number of digits
+  final[,c("Women","Men")] <- round(final[,c("Women","Men")],0)
+  
+  final[,c("da",
+           "dx",
+           "dy",
+           "Mean y",
+           "AI ratio",
+           "d_Mod_Signed")] <- round(final[,c("da",
+                                              "dx",
+                                              "dy",
+                                              "Mean y",
+                                              "AI ratio",
+                                              "d_Mod_Signed")],2)
+  
+  final[,c("rax","ray","rxy")] <- round(final[,c("rax","ray","rxy")],3)  
+  
+  #save simulation estimates to .csv
+  write.csv(final,paste0("sim.output.csv"))
+  
+  #print completion message to console
+  cat("\n\n")
+  cat(paste0(c(rep(">",20),"100 %")))
+  tot.time <- round(((proc.time()["elapsed"]/t)-(start/t)),1)     #total runtime
+  cat(paste0("\n\nAll simulations complete!\nTime Elapsed: ",
+             tot.time,
+             " ",
+             u,
+             "\n\nSee '",
+             getwd(),
+             "/sim.output.csv' for results\n"))
+
+
+# Cleanup (optional) ------------------------------------------------------
+
+  
+#CAUTION: SAVE EvERYTHING FIRST if you plan on running the code below!
+#if enabled, the code below will delete everything in the RStudio workspace
+
+# if(!is.null(dev.list())) dev.off() #clear plots
+# rm(list = ls(all.names = TRUE))    #clear workspace including hidden objects
+# gc()                               #release memory with garbage collector
+# cat("\014")                        #clear console
+
+return(invisible())  
+
+}))
+
+
+run()
