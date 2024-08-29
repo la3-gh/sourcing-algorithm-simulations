@@ -5,14 +5,14 @@ run <- function() (invisible({
 
 
   # This Software:
-    # [information removed for blind review]. (2023). Sourcing Algorithm
-    # Simulations: A Companion R script [Software]. Retrieved from [information
-    # removed for blind review]
+    # Alexander, III, L., Song, Q. C., Hickman, L., & Shin, H. J. (2024). Sourcing 
+	  # Algorithm Simulations: A Companion R script [Software]. Retrieved from
+    # https://github.com/la3-gh/sourcing-algorithm-simulations/
   
   # Research Article:
-    # [information removed for blind review]. (2023). Sourcing algorithms: 
-    # Rethinking fairness in hiring in the era of algorithmic 
-    # recruitment.
+    # Alexander, III, L., Song, Q. C., Hickman, L., & Shin, H. J. (2024). Sourcing 
+	  # algorithms: Rethinking fairness in hiring in the era of algorithmic recruitment.
+	  # International Journal of Selection and Assessment. 10.1111/ijsa.12499
     
 
 # Information -------------------------------------------------------------
@@ -54,9 +54,9 @@ run <- function() (invisible({
       
   To cite this software, please use:
   
-  [information removed for blind review]. (2023). Sourcing Algorithm
-  Simulations: A Companion R script [Software]. Retrieved from [information
-  removed for blind review]\n\n")
+  Alexander, III, L., Song, Q. C., Hickman, L., & Shin, H. J. (2024). Sourcing 
+	Algorithm Simulations: A Companion R script [Software]. Retrieved from
+  https://github.com/la3-gh/sourcing-algorithm-simulations/\n\n")
 
 
 # Script Setup ------------------------------------------------------------
