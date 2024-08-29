@@ -121,7 +121,7 @@ run <- function() (invisible({
   y.v <- 1              #variance of y
   g.m <- 0              #mean of group variable (continuous)
   g.v <- 1              #variance of group variable (continuous)
-  g.p <- .5             #male proportion of population
+  g.p <- .5             #majority proportion of population
                         #positive mean subgroup differences favor the majority (min=0,maj=1)
   da <- c(0,.2,.5,1)    #mean subgroup difference in predictor a (Cohen's d)
   di <- 0               #mean subgroup difference in predictor i (Cohen's d)
