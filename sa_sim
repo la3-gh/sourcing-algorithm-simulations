@@ -5,14 +5,14 @@ run <- function() (invisible({
 
 
   # This Software:
-    # [information removed for blind review]. (2023). Sourcing Algorithm
-    # Simulations: A Companion R script [Software]. Retrieved from [information
-    # removed for blind review]
+    # Alexander, III, L., Song, Q. C., Hickman, L., & Shin, H. J. (2024). Sourcing 
+    # Algorithm Simulations: A Companion R script [Software]. Retrieved from 
+    # https://github.com/la3-gh/sourcing-algorithm-simulations/blob/main/sa_sim
   
   # Research Article:
-    # [information removed for blind review]. (2023). Sourcing algorithms: 
-    # Rethinking fairness in hiring in the era of algorithmic 
-    # recruitment.
+    # Alexander, III, L., Song, Q. C., Hickman, L., & Shin, H. J. (2024). Sourcing algorithms: 
+    # Rethinking fairness in hiring in the era of algorithmic recruitment.
+    # International Journal of Selection and Assessment. https://doi.org/10.1111/ijsa.12499
     
 
 # Information -------------------------------------------------------------
@@ -119,10 +119,10 @@ run <- function() (invisible({
   x.v <- 1              #variance of x
   y.m <- 0              #mean of y (performance criterion score)
   y.v <- 1              #variance of y
-  g.m <- 0              #mean of gender (continuous)
-  g.v <- 1              #variance of gender (continuous)
-  g.p <- .5             #male proportion of population
-                        #positive mean subgroup differences favor men (f=0,m=1)
+  g.m <- 0              #mean of group variable (continuous)
+  g.v <- 1              #variance of group variable (continuous)
+  g.p <- .5             #majority proportion of population
+                        #positive mean subgroup differences favor majority group (f=0,m=1)
   da <- c(0,1)#0,.2,.5,1)    #mean subgroup difference in predictor a (Cohen's d)
   di <- 0               #mean subgroup difference in predictor i (Cohen's d)
   dx <- c(0)#0,.1,.3,.5)   #mean subgroup difference in predictor x (Cohen's d)
@@ -254,26 +254,27 @@ run <- function() (invisible({
       index <- c(1:n.0)                                   #create index
       scores.pop <- cbind(index,scores.pop)               #add to dataframe
       
-      scores.pop <- scores.pop %>%                        #make discrete gender
+      scores.pop <- scores.pop %>%                        #make discrete group
                     mutate(g.dis = case_when(             #variable (f=0,m=1)
-                     g <= quantile(scores.pop$g,probs=c((1-g.p))) ~ 0,  #women
-                     g > quantile(scores.pop$g,probs=c((1-g.p))) ~ 1)   #men
+                     g <= quantile(scores.pop$g,probs=c((1-g.p))) ~ 0,  #minority
+                     g > quantile(scores.pop$g,probs=c((1-g.p))) ~ 1)   #majority
                     )
       
-      #get counts of men and women
-      women1 <- nrow(scores.pop[scores.pop$g.dis==0,])
-      men1 <- nrow(scores.pop[scores.pop$g.dis==1,])
+      #get counts of majority and minority group members
+      minority1 <- nrow(scores.pop[scores.pop$g.dis==0,])
+      majority1 <- nrow(scores.pop[scores.pop$g.dis==1,])
 
-      #create gender factor
+      #create group variable factor
       gen.fac1 <- factor(scores.pop$g.dis,levels=c("1","0"),ordered=TRUE)
       
       #store descriptive statistics for population data
-      if (women1>=1|men1>=1) {                             #check if there are
-                                                           #enough men and women
+      if (minority1>=1|majority1>=1) {                     #check if there are
+                                                           #enough majority and 
+                                                           #minority group members
                                                            #for da, dx, and dy
         
-      temp1 <- c(women1,                                                 #women
-                 men1,                                                   #men
+      temp1 <- c(minority1,                                              #minority
+                 majority1,                                              #majority
                  mean(scores.pop$a,na.rm=TRUE),                          #mean a
                  mean(scores.pop$x,na.rm=TRUE),                          #mean x
                  mean(scores.pop$y,na.rm=TRUE),                          #mean y
@@ -286,8 +287,8 @@ run <- function() (invisible({
       
       } else {
         
-      temp1 <- c(women1,                                                 #women
-                 men1,                                                   #men
+      temp1 <- c(minority1,                                              #minority
+                 majority1,                                              #majority
                  mean(scores.pop$a,na.rm=TRUE),                          #mean a
                  mean(scores.pop$x,na.rm=TRUE),                          #mean x
                  mean(scores.pop$y,na.rm=TRUE),                          #mean y
@@ -329,22 +330,23 @@ run <- function() (invisible({
       } 
       
       #clean up ad target scores
-      rm(scores.1,men1,women1,gen.fac1)
+      rm(scores.1,majority1,minority1,gen.fac1)
       
-      #get counts of men and women
-      women2 <- nrow(scores.2[scores.2$g.dis==0,])
-      men2 <- nrow(scores.2[scores.2$g.dis==1,])
+      #get counts of majority and minority group members
+      minority2 <- nrow(scores.2[scores.2$g.dis==0,])
+      majority2 <- nrow(scores.2[scores.2$g.dis==1,])
       
-      #create gender factor
+      #create group variable factor
       gen.fac2 <- factor(scores.2$g.dis,levels=c("1","0"),ordered=TRUE)
       
       #store descriptive statistics for applicant data
-      if (women2>=1|men2>=1) {                             #check if there are
-                                                           #enough men and women
+      if (minority2>=1|majority2>=1) {                     #check if there are
+                                                           #enough majority and
+                                                           #minority group members
                                                            #for da, dx, and dy
         
-      temp2 <- c(women2,                                                 #women
-                 men2,                                                   #men
+      temp2 <- c(minority2,                                              #minority
+                 majority2,                                              #majority
                  mean(scores.2$a,na.rm=TRUE),                            #mean a
                  mean(scores.2$x,na.rm=TRUE),                            #mean x
                  mean(scores.2$y,na.rm=TRUE),                            #mean y
@@ -357,8 +359,8 @@ run <- function() (invisible({
       
       } else {
       
-      temp2 <- c(women2,                                                 #women
-                 men2,                                                   #men
+      temp2 <- c(minority2,                                              #minority
+                 majority2,                                              #majority
                  mean(scores.2$a,na.rm=TRUE),                            #mean a
                  mean(scores.2$x,na.rm=TRUE),                            #mean x
                  mean(scores.2$y,na.rm=TRUE),                            #mean y
@@ -374,20 +376,21 @@ run <- function() (invisible({
       #hurdle 2 - select top scores on x to select recipients of offers
       scores.3 <- top_n(scores.2,n.3,x)
       
-      #get counts of men and women
-      women3 <- nrow(scores.3[scores.3$g.dis==0,])
-      men3 <- nrow(scores.3[scores.3$g.dis==1,])
+      #get counts of majority and minority group members
+      minority3 <- nrow(scores.3[scores.3$g.dis==0,])
+      majority3 <- nrow(scores.3[scores.3$g.dis==1,])
       
-      #create gender factor
+      #create group variable factor
       gen.fac3 <- factor(scores.3$g.dis,levels=c("1","0"),ordered=TRUE)
       
       #store descriptive statistics for hires
-      if (women3>=1|men3>=1) {                             #check if there are
-                                                           #enough men and women
+      if (minority3>=1|majority3>=1) {                     #check if there are
+                                                           #enough majority and
+                                                           #minority group members
                                                            #for da, dx, and dy
         
-      temp3 <- c(women3,                                                 #women
-                 men3,                                                   #men
+      temp3 <- c(minority3,                                              #minority
+                 majority3,                                              #majority
                  mean(scores.3$a,na.rm=TRUE),                            #mean a
                  mean(scores.3$x,na.rm=TRUE),                            #mean x
                  mean(scores.3$y,na.rm=TRUE),                            #mean y
@@ -397,15 +400,15 @@ run <- function() (invisible({
                  cor(scores.3$a,scores.3$y,use="complete.obs"),          #ray
                  cor(scores.3$x,scores.3$y,use="complete.obs"),          #rxy
                  cor(scores.3$a,scores.3$x,use="complete.obs"),          #rax
-                 (women3/women2)/(men3/men2),                            #ai
+                 (minority3/minority2)/(majority3/majority2),                            #ai
                  cor(scores.3[scores.3$g.dis==1,"x"],      
                      scores.3[scores.3$g.dis==1,"y"],      #rxy.m to calculate
                      use="complete.obs"))                  #d_Mod_Signed (Dahlke
                                                            #& Sackett, 2022;
     } else {                                               #Nye & Sackett, 2017)
       
-      temp3 <- c(women3,                                                 #women
-                 men3,                                                   #men
+      temp3 <- c(minority3,                                              #minority
+                 majority3,                                              #majority
                  mean(scores.3$a,na.rm=TRUE),                            #mean a
                  mean(scores.3$x,na.rm=TRUE),                            #mean x
                  mean(scores.3$y,na.rm=TRUE),                            #mean y
@@ -415,7 +418,7 @@ run <- function() (invisible({
                  cor(scores.3$a,scores.3$y,use="complete.obs"),          #ray
                  cor(scores.3$x,scores.3$y,use="complete.obs"),          #rxy
                  cor(scores.3$a,scores.3$x,use="complete.obs"),          #rax
-                 (women3/women2)/(men3/men2),                            #ai
+                 (minority3/minority2)/(majority3/majority2),                            #ai
                  cor(scores.3[scores.3$g.dis==1,"x"],
                      scores.3[scores.3$g.dis==1,"y"],                    #rxy.m
                      use="complete.obs"))
@@ -423,7 +426,7 @@ run <- function() (invisible({
       }
       
       #clean up scores for applicants and hires
-      rm(scores.2,scores.3,men2,men3,women2,women3,gen.fac2,gen.fac3)
+      rm(scores.2,scores.3,majority2,majority3,minority2,minority3,gen.fac2,gen.fac3)
       
       #calculate d.mod.signed from temp3
       d.mod.signed <- (temp3[7] - (temp3[13]*temp3[8]))
@@ -670,12 +673,12 @@ run <- function() (invisible({
                               "rax1","ray1","rxy1",
                               "y1","empty1","empty2")])
   
-  names(final) <- c("Sim","Group","Women","Men","Total",        #label columns       
+  names(final) <- c("Sim","Group","Minority","Majority","Total",        #label columns       
                     "da","dx","dy","rax","ray","rxy",
                     "Mean y","AI ratio","d_Mod_Signed")
   
   #round all estimates to the appropriate number of digits
-  final[,c("Women","Men")] <- round(final[,c("Women","Men")],0)
+  final[,c("Minority","Majority")] <- round(final[,c("Minority","Majority")],0)
   
   final[,c("da",
            "dx",
